@@ -1,8 +1,10 @@
 import pygame
 import sys
+import random
 
 pygame.init()
 pygame.mixer.init()
+
 
 class Config:
     LARGURA = 800
@@ -13,8 +15,6 @@ class Config:
 
 
 class Audio:
-    """Controla todos os sons do jogo"""
-
     def __init__(self):
         self.raquete = pygame.mixer.Sound("sounds/raquete.mp3")
         self.parede = pygame.mixer.Sound("sounds/parede.mp3")
@@ -51,14 +51,28 @@ class Bola:
 
     def inverter_x(self):
         self.vel_x *= -1
+        self.aplicar_aleatoriedade()  # 🔥 Task 2
 
     def inverter_y(self):
         self.vel_y *= -1
+        self.aplicar_aleatoriedade()  # 🔥 Task 2
+
+    def aplicar_aleatoriedade(self):
+        # variação aleatória no movimento
+        self.vel_x += random.choice([-1, 0, 1])
+        self.vel_y += random.choice([-1, 0, 1])
+
+        # evitar movimento muito lento ou travado
+        if abs(self.vel_x) < 3:
+            self.vel_x = 3 if self.vel_x >= 0 else -3
+
+        if abs(self.vel_y) < 3:
+            self.vel_y = 3 if self.vel_y >= 0 else -3
 
     def resetar(self):
         self.rect.center = (Config.LARGURA // 2, Config.ALTURA // 2)
-        self.vel_x = 5
-        self.vel_y = 5
+        self.vel_x = random.choice([-5, 5])
+        self.vel_y = random.choice([-5, 5])
 
     def desenhar(self, tela):
         pygame.draw.circle(tela, Config.COR_OBJETOS, self.rect.center, 7)
@@ -78,7 +92,6 @@ class Game:
         self.score1 = 0
         self.score2 = 0
 
-        # controle de colisão (evita som repetindo)
         self.colidiu_raquete = False
         self.colidiu_parede = False
 
