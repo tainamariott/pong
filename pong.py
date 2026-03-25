@@ -41,9 +41,19 @@ class Raquete:
 
 
 class Bola:
-    def __init__(self):
+    def __init__(self, verdadeira=True):
         self.rect = pygame.Rect(0, 0, 7, 7)
+        self.verdadeira = verdadeira
+        self.cor = Config.COR_OBJETOS if verdadeira else self.cor_aleatoria()
+        self.colidiu_raquete = False  # ✅ controle individual
         self.resetar()
+
+    def cor_aleatoria(self):
+        return (
+            random.randint(50, 255),
+            random.randint(50, 255),
+            random.randint(50, 255),
+        )
 
     def mover(self):
         self.rect.x += self.vel_x
@@ -51,18 +61,16 @@ class Bola:
 
     def inverter_x(self):
         self.vel_x *= -1
-        self.aplicar_aleatoriedade()  # 🔥 Task 2
+        self.aplicar_aleatoriedade()
 
     def inverter_y(self):
         self.vel_y *= -1
-        self.aplicar_aleatoriedade()  # 🔥 Task 2
+        self.aplicar_aleatoriedade()
 
     def aplicar_aleatoriedade(self):
-        # variação aleatória no movimento
         self.vel_x += random.choice([-1, 0, 1])
         self.vel_y += random.choice([-1, 0, 1])
 
-        # evitar movimento muito lento ou travado
         if abs(self.vel_x) < 3:
             self.vel_x = 3 if self.vel_x >= 0 else -3
 
@@ -75,7 +83,7 @@ class Bola:
         self.vel_y = random.choice([-5, 5])
 
     def desenhar(self, tela):
-        pygame.draw.circle(tela, Config.COR_OBJETOS, self.rect.center, 7)
+        pygame.draw.circle(tela, self.cor, self.rect.center, 7)
 
 
 class Game:
@@ -88,12 +96,13 @@ class Game:
     def reset(self):
         self.player1 = Raquete(15, Config.ALTURA // 2 - 30)
         self.player2 = Raquete(Config.LARGURA - 25, Config.ALTURA // 2 - 30)
-        self.bola = Bola()
+
+        self.bolas = [Bola(verdadeira=True)]
+
         self.score1 = 0
         self.score2 = 0
 
-        self.colidiu_raquete = False
-        self.colidiu_parede = False
+        self.tempo_ultimo_powerup = pygame.time.get_ticks()
 
     def tratar_eventos(self):
         for evento in pygame.event.get():
@@ -110,52 +119,79 @@ class Game:
             self.player1.mover("baixo")
 
     def mover_ia(self):
-        if self.player2.rect.centery < self.bola.rect.centery:
+        for bola in self.bolas:
+            if bola.verdadeira:
+                alvo = bola
+                break
+
+        if self.player2.rect.centery < alvo.rect.centery:
             self.player2.mover("baixo")
         else:
             self.player2.mover("cima")
 
+    def multiplicar_bolas(self, bola_base):
+        novas = []
+
+        for _ in range(4):
+            b = Bola(verdadeira=False)
+            b.rect.center = bola_base.rect.center
+
+            b.vel_x = bola_base.vel_x * random.choice([-1, 1])
+            b.vel_y = bola_base.vel_y * random.choice([-1, 1])
+
+            novas.append(b)
+
+        self.bolas.extend(novas)
+
     def verificar_colisoes(self):
-        # colisão com raquete
-        colidiu_raquete = self.bola.rect.colliderect(self.player1.rect) or \
-                          self.bola.rect.colliderect(self.player2.rect)
+        tempo_atual = pygame.time.get_ticks()
 
-        if colidiu_raquete:
-            if not self.colidiu_raquete:
-                self.bola.inverter_x()
-                self.audio.raquete.stop()
-                self.audio.raquete.play()
-                self.colidiu_raquete = True
-        else:
-            self.colidiu_raquete = False
+        for bola in self.bolas:
+            colidiu = bola.rect.colliderect(self.player1.rect) or \
+                      bola.rect.colliderect(self.player2.rect)
 
-        # colisão com parede
-        colidiu_parede = self.bola.rect.top <= 0 or self.bola.rect.bottom >= Config.ALTURA
+            if colidiu:
+                if not bola.colidiu_raquete:
+                    bola.inverter_x()
+                    self.audio.raquete.stop()
+                    self.audio.raquete.play()
 
-        if colidiu_parede:
-            if not self.colidiu_parede:
-                self.bola.inverter_y()
+                    if tempo_atual - self.tempo_ultimo_powerup >= 5000:
+                        self.multiplicar_bolas(bola)
+                        self.tempo_ultimo_powerup = tempo_atual
+
+                    bola.colidiu_raquete = True
+            else:
+                bola.colidiu_raquete = False
+
+            if bola.rect.top <= 0 or bola.rect.bottom >= Config.ALTURA:
+                bola.inverter_y()
                 self.audio.parede.stop()
                 self.audio.parede.play()
-                self.colidiu_parede = True
-        else:
-            self.colidiu_parede = False
 
     def verificar_pontos(self):
-        if self.bola.rect.left <= 0:
-            self.score2 += 1
-            self.audio.gol.play()
-            self.bola.resetar()
+        for bola in self.bolas:
+            if not bola.verdadeira:
+                continue
 
-        if self.bola.rect.right >= Config.LARGURA:
-            self.score1 += 1
-            self.audio.gol.play()
-            self.bola.resetar()
+            if bola.rect.left <= 0:
+                self.score2 += 1
+                self.audio.gol.play()
+                self.reset()
+                return True
 
-        return self.score1 >= 2 or self.score2 >= 2
+            if bola.rect.right >= Config.LARGURA:
+                self.score1 += 1
+                self.audio.gol.play()
+                self.reset()
+                return True
+
+        return False
 
     def atualizar(self):
-        self.bola.mover()
+        for bola in self.bolas:
+            bola.mover()
+
         self.mover_jogador()
         self.mover_ia()
         self.verificar_colisoes()
@@ -166,7 +202,9 @@ class Game:
 
         self.player1.desenhar(self.tela)
         self.player2.desenhar(self.tela)
-        self.bola.desenhar(self.tela)
+
+        for bola in self.bolas:
+            bola.desenhar(self.tela)
 
         font = pygame.font.SysFont(None, 36)
         texto = font.render(f"{self.score1} - {self.score2}", True, Config.COR_OBJETOS)
